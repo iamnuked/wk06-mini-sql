@@ -27,6 +27,8 @@ sequenceDiagram
     participant U as "사용자"
     participant M as "main.c"
     participant P as "parser.c"
+    participant T as "TokenList"
+    participant A as "SQLScript(AST)"
     participant E as "executor.c"
     participant S as "storage.c"
     participant F as "파일 시스템"
@@ -34,6 +36,16 @@ sequenceDiagram
     U->>M: SQL 파일 실행 요청
     M->>M: read_text_file()
     M->>P: parse_sql_script(source, &script, ...)
+    P->>P: tokenize_sql()
+    P->>T: 토큰 동적배열 생성\n(키워드, 식별자, 값, 기호)
+    P->>P: 토큰 순회
+    alt INSERT
+        P->>P: parse_insert()
+        P->>A: Statement 추가
+    else SELECT
+        P->>P: parse_select()
+        P->>A: Statement 추가
+    end
     P-->>M: SQLScript 채움
     loop statement 순회
         M->>E: execute_statement(...)
@@ -51,7 +63,7 @@ sequenceDiagram
     end
 ```
 
-전체 흐름은 `main.c`가 입력 파일을 읽고, `parser.c`가 SQL을 구조체로 파싱한 뒤, `executor.c`와 `storage.c`가 실제 동작을 수행하는 구조입니다.
+전체 흐름은 `main.c`가 입력 파일을 읽고, `parser.c`가 먼저 SQL 문자열을 토큰 동적배열로 만든 뒤, 그 토큰들을 `Statement` 구조체로 파싱해서 `SQLScript` 동적배열에 저장하고, 이후 `executor.c`와 `storage.c`가 실제 동작을 수행하는 구조입니다.
 
 ## 2. INSERT / SELECT 로직
 
