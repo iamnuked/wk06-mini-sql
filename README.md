@@ -213,14 +213,10 @@ SELECT name, grade FROM demo.students WHERE id = 2;
 ### VS Code 터미널 명령어
 
 ```powershell
-cd D:\03Dev\05Jungle\SuYo\Week5\W5-Team3\wk06-mini-sql
-$env:ZIG_EXE='D:\03Dev\01DevTools\zig-x86_64-windows-0.15.2\zig.exe'
-powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1
 Remove-Item .\tests\tmp\demo_db -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force .\tests\tmp\demo_db | Out-Null
 Copy-Item .\examples\db\* .\tests\tmp\demo_db -Recurse -Force
-Get-Content .\tests\tmp\demo_db\demo\students.data
-.\build\mini_sql.exe .\tests\tmp\demo_db .\examples\sql\demo_workflow.sql
+docker run --rm -v "${PWD}\tests\tmp\demo_db:/app/demo_db" -v "${PWD}\examples\sql:/app/sql" mini-sql-demo /app/demo_db /app/sql/demo_workflow.sql
 Get-Content .\tests\tmp\demo_db\demo\students.data
 ```
 
