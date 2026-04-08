@@ -117,15 +117,15 @@ flowchart TB
 ### INSERT
 
 ```mermaid
-%%{init: {'themeVariables': {'fontSize': '20px'}}}%%
-flowchart LR
-    A["INSERT SQL 입력"] --> B["InsertStatement 생성"]
-    B --> C["테이블 경로 계산"]
-    C --> D[".schema 로드"]
-    D --> E["컬럼명-스키마 매핑"]
-    E --> F["값 순서를 스키마 기준으로 재배치"]
-    F --> G["escape 후 한 줄로 직렬화"]
-    G --> H[".data 끝에 append"]
+%%{init: {'themeVariables': {'fontSize': '20px'}, 'flowchart': {'nodeSpacing': 40, 'rankSpacing': 55}}}%%
+flowchart TD
+    A["INSERT SQL 입력"] --> B["parser.c에서 InsertStatement 생성"]
+    B --> C["storage.c에서 대상 테이블 경로 계산"]
+    C --> D[".schema 파일을 읽어 실제 컬럼 순서 확인"]
+    D --> E["INSERT 컬럼명과 스키마 컬럼을 1:1로 매핑"]
+    E --> F["값을 스키마 순서에 맞게 다시 재배치"]
+    F --> G["특수문자를 escape하고 한 줄 row로 직렬화"]
+    G --> H[".data 파일 끝에 append"]
 ```
 
 INSERT 동작 단계:
@@ -141,20 +141,20 @@ INSERT 동작 단계:
 ### SELECT
 
 ```mermaid
-%%{init: {'themeVariables': {'fontSize': '20px'}}}%%
-flowchart LR
-    A["SELECT SQL 입력"] --> B["SelectStatement 생성"]
-    B --> C["테이블 경로 계산"]
-    C --> D[".schema 로드"]
-    D --> E["조회 컬럼 / WHERE 인덱스 결정"]
-    E --> F[".data를 한 줄씩 읽기"]
-    F --> G["row를 컬럼 값으로 복원"]
-    G --> H{"WHERE 만족?"}
+%%{init: {'themeVariables': {'fontSize': '20px'}, 'flowchart': {'nodeSpacing': 40, 'rankSpacing': 55}}}%%
+flowchart TD
+    A["SELECT SQL 입력"] --> B["parser.c에서 SelectStatement 생성"]
+    B --> C["storage.c에서 대상 테이블 경로 계산"]
+    C --> D[".schema 파일을 읽어 전체 컬럼 목록 확보"]
+    D --> E["조회 컬럼과 WHERE 컬럼 인덱스를 결정"]
+    E --> F[".data 파일을 한 줄씩 읽는다"]
+    F --> G["row를 컬럼 값 목록으로 복원한다"]
+    G --> H{"WHERE 조건을 만족하는가?"}
     H -- "아니오" --> F
-    H -- "예" --> I["필요한 컬럼만 projection"]
+    H -- "예" --> I["필요한 컬럼만 projection 해서 새 row 구성"]
     I --> J["QueryResult에 행 추가"]
     J --> F
-    F --> K["표 형태로 출력"]
+    F --> K["executor.c가 표 형태로 출력"]
 ```
 
 SELECT 동작 단계:
