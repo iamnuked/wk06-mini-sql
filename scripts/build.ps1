@@ -22,8 +22,6 @@ New-Item -ItemType Directory -Force $OutputDir | Out-Null
 
 $sources = @(
     "src/common.c",
-    "src/ast.c",
-    "src/lexer.c",
     "src/parser.c",
     "src/storage.c",
     "src/executor.c",
@@ -32,8 +30,6 @@ $sources = @(
 
 $testSources = @(
     "src/common.c",
-    "src/ast.c",
-    "src/lexer.c",
     "src/parser.c",
     "src/storage.c",
     "src/executor.c",
