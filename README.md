@@ -97,7 +97,6 @@ flowchart TB
 - `src/parser.c`
   - tokenizer 코드 + 파서 코드 통합.
   - `parse_sql_script()`가 문자열을 토큰화하고 문장 단위 구조(내부 Statement/SQLScript 형태)로 변환.
-  - 현재 AST 전용 헤더/소스(`ast.h`, `ast.c`)는 삭제됨.
 - `src/executor.c`
   - 파싱된 statement를 실행 타입별로 라우팅.
   - INSERT/SELECT 실행 결과를 `ExecutionResult`로 정리.
@@ -107,12 +106,6 @@ flowchart TB
 - `src/common.c`
   - 문자열 리스트, 파일 입출력, 경로 유틸(부모 디렉터리 생성) 등 공통 유틸리티.
 
-제거된 모듈:
-
-- `include/lexer.h`, `src/lexer.c`
-- `include/ast.h`, `src/ast.c`
-
-AST에 사용되던 타입들은 현재 `include/parser.h`로 통합되었습니다.
 
 ---
 
