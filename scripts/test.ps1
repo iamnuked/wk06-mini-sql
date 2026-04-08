@@ -32,7 +32,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "mini_sql execution failed"
 }
 
-if ($outputText -notmatch "INSERT 0 1") {
+if ($outputText -notmatch "INSERT 1") {
     throw "Expected INSERT output was not found."
 }
 

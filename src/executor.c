@@ -53,7 +53,7 @@ static void print_separator(const size_t *widths, size_t count, FILE *stream) {
 
 void print_execution_result(const ExecutionResult *result, FILE *stream) {
     if (result->kind == EXECUTION_INSERT) {
-        fprintf(stream, "INSERT 0 %zu\n", result->affected_rows);
+        fprintf(stream, "INSERT %zu\n", result->affected_rows);
         return;
     }
 

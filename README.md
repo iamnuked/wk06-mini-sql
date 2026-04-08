@@ -1,28 +1,27 @@
-﻿# wk06-mini-sql
+# wk06-mini-sql
 
-간단한 파일 기반 mini SQL 실행기입니다. SQL 스크립트 파일을 읽어 `INSERT`/`SELECT`를 처리하고, 결과를 `.schema`/`.data` 파일로 저장합니다.
+간단한 파일 기반 mini SQL 실행기입니다. SQL 스크립트 파일을 읽어 `INSERT`와 `SELECT`를 수행하고, 결과를 `.schema`와 `.data` 파일에 저장합니다.
 
 ## 지원 기능
 
 - `INSERT INTO [schema.]table (col1, col2, ...) VALUES (...)`
 - `SELECT * FROM [schema.]table`
 - `SELECT col1, col2 FROM [schema.]table`
-- `WHERE column = value` (단일 조건만 지원)
-- SQL 파일 주석
+- `WHERE column = value`
+- SQL 주석
   - `-- line comment`
   - `/* block comment */`
 
 예시:
 
 ```sql
-INSERT INTO demo.students (id, name, major) VALUES (1, 'Alice', 'DB');
+INSERT INTO demo.students (id, name, major, grade) VALUES (2, 'Bob', 'AI', 'B');
 SELECT * FROM demo.students;
-SELECT id, name FROM demo.students WHERE id = 1;
+SELECT name, grade FROM demo.students WHERE id = 2;
 ```
 
----
+## 1. 파이프라인
 
-## 실행 파이프라인
 ```mermaid
 sequenceDiagram
     participant U as "사용자"
@@ -33,87 +32,95 @@ sequenceDiagram
     participant F as "파일 시스템"
 
     U->>M: SQL 파일 실행 요청
-    M->>P: SQL 텍스트 전달
-    P->>P: 토큰화 + AST 생성
-    P-->>M: SQLScript
-    M->>E: statement 실행 요청
-    E->>S: INSERT / SELECT 처리
-    alt INSERT
-        S->>F: .data append
-        F-->>S: 성공/실패
-    else SELECT
-        S->>F: .data, .schema read
-        F-->>S: 행 목록
+    M->>M: read_text_file()
+    M->>P: parse_sql_script(source, &script, ...)
+    P-->>M: SQLScript 채움
+    loop statement 순회
+        M->>E: execute_statement(...)
+        alt INSERT
+            E->>S: append_insert_row(...)
+            S->>F: .schema 읽기 + .data append
+            S-->>E: affected_rows 채움
+        else SELECT
+            E->>S: run_select_query(...)
+            S->>F: .schema / .data 읽기
+            S-->>E: QueryResult 채움
+        end
+        E-->>M: ExecutionResult 반환
+        M-->>U: print_execution_result()
     end
-    S-->>E: 처리 결과
-    E-->>M: ExecutionResult
-    M-->>U: 출력
 ```
 
----
+전체 흐름은 `main.c`가 입력 파일을 읽고, `parser.c`가 SQL을 구조체로 파싱한 뒤, `executor.c`와 `storage.c`가 실제 동작을 수행하는 구조입니다.
 
-## INSERT / SELECT 로직
+## 2. INSERT / SELECT 로직
 
-파일 기반 DB이기 때문에 `INSERT`와 `SELECT`는 모두 `.schema`와 `.data` 파일을 기준으로 동작합니다.  
-핵심은 `INSERT`는 "스키마 순서에 맞춰 한 줄을 추가"하는 과정이고, `SELECT`는 "스키마를 기준으로 컬럼 위치를 해석한 뒤 `.data`를 순회"하는 과정입니다.
+파일 기반 DB이기 때문에 핵심은 항상 `.schema`를 기준으로 컬럼 순서를 해석하고, `.data`를 한 줄씩 row로 다루는 것입니다.
 
 ### INSERT
 
 ```mermaid
-%%{init: {'themeVariables': {'fontSize': '20px'}, 'flowchart': {'nodeSpacing': 40, 'rankSpacing': 55}}}%%
 flowchart TD
-    A["INSERT SQL 입력"] --> B["parser.c에서 InsertStatement 생성"]
-    B --> C["storage.c에서 대상 테이블 경로 계산"]
-    C --> D[".schema 파일을 읽어 실제 컬럼 순서 확인"]
-    D --> E["INSERT 컬럼명과 스키마 컬럼을 1:1로 매핑"]
-    E --> F["값을 스키마 순서에 맞게 다시 재배치"]
-    F --> G["특수문자를 escape하고 한 줄 row로 직렬화"]
+    A["INSERT SQL"] --> B["InsertStatement 생성"]
+    B --> C["테이블 경로 계산"]
+    C --> D[".schema 읽기"]
+    D --> E["컬럼 순서 확인"]
+    E --> F["입력 값을 스키마 순서로 재배치"]
+    F --> G["row 직렬화"]
     G --> H[".data 파일 끝에 append"]
 ```
 
-INSERT 동작 단계:
+INSERT 단계:
 
 1. `parser.c`가 `INSERT INTO ... VALUES ...`를 `InsertStatement`로 파싱합니다.
-2. `storage.c`가 대상 테이블의 `.schema` / `.data` 경로를 계산합니다.
-3. `.schema`를 읽어 실제 테이블 컬럼 순서를 확인합니다.
+2. `storage.c`가 대상 테이블의 `.schema`와 `.data` 경로를 계산합니다.
+3. `.schema`를 읽어 실제 컬럼 순서를 복원합니다.
 4. INSERT에 들어온 컬럼명을 스키마 컬럼과 매핑합니다.
-5. 값을 스키마 순서대로 다시 정렬하고, 빠진 컬럼은 빈 문자열로 채웁니다.
-6. `|`, `\`, 개행 같은 문자를 escape해서 한 줄 텍스트로 직렬화합니다.
-7. 완성된 row를 `.data` 파일 끝에 추가합니다.
+5. 값을 스키마 순서대로 다시 정렬합니다.
+6. `serialize_row()`가 `|` 구분 텍스트 한 줄로 직렬화합니다.
+7. `append_text_file()`이 `.data` 끝에 row를 추가합니다.
+
+관련 코드 포인트:
+
+- `append_insert_row()` in `src/storage.c`
+- `serialize_row()` in `src/storage.c`
+- `find_column_index()` in `src/storage.c`
 
 ### SELECT
 
 ```mermaid
-%%{init: {'themeVariables': {'fontSize': '20px'}, 'flowchart': {'nodeSpacing': 40, 'rankSpacing': 55}}}%%
 flowchart TD
-    A["SELECT SQL 입력"] --> B["parser.c에서 SelectStatement 생성"]
-    B --> C["storage.c에서 대상 테이블 경로 계산"]
-    C --> D[".schema 파일을 읽어 전체 컬럼 목록 확보"]
-    D --> E["조회 컬럼과 WHERE 컬럼 인덱스를 결정"]
-    E --> F[".data 파일을 한 줄씩 읽는다"]
-    F --> G["row를 컬럼 값 목록으로 복원한다"]
-    G --> H{"WHERE 조건을 만족하는가?"}
-    H -- "아니오" --> F
-    H -- "예" --> I["필요한 컬럼만 projection 해서 새 row 구성"]
-    I --> J["QueryResult에 행 추가"]
+    A["SELECT SQL"] --> B["SelectStatement 생성"]
+    B --> C[".schema 읽기"]
+    C --> D["조회할 컬럼 인덱스 결정"]
+    D --> E["WHERE 인덱스 결정"]
+    E --> F[".data를 한 줄씩 읽기"]
+    F --> G["split_pipe_line()으로 row 복원"]
+    G --> H{"WHERE 만족?"}
+    H -- "No" --> F
+    H -- "Yes" --> I["projection 적용"]
+    I --> J["QueryResult에 추가"]
     J --> F
-    F --> K["executor.c가 표 형태로 출력"]
 ```
 
-SELECT 동작 단계:
+SELECT 단계:
 
 1. `parser.c`가 `SELECT ... FROM ... WHERE ...`를 `SelectStatement`로 파싱합니다.
-2. `storage.c`가 `.schema`를 읽어 전체 컬럼 목록을 확보합니다.
+2. `.schema`를 읽어 전체 컬럼 목록을 확보합니다.
 3. `SELECT *`인지, 특정 컬럼만 조회하는지에 따라 projection 인덱스를 준비합니다.
-4. `WHERE column = value`가 있으면 비교할 컬럼 인덱스를 먼저 찾습니다.
-5. `.data` 파일을 한 줄씩 읽어 각 row를 다시 컬럼 값 목록으로 복원합니다.
-6. WHERE 조건을 통과한 row만 선택합니다.
-7. 필요한 컬럼만 뽑아 `QueryResult`에 누적합니다.
-8. 마지막에 `executor.c`가 결과를 테이블 형식으로 출력합니다.
+4. `WHERE column = value`가 있으면 비교할 컬럼 위치를 먼저 찾습니다.
+5. `.data`를 한 줄씩 읽어 `split_pipe_line()`으로 row를 복원합니다.
+6. WHERE를 통과한 row만 선택합니다.
+7. 필요한 컬럼만 `QueryResult`에 누적합니다.
+8. `executor.c`가 최종 결과를 표 형태로 출력합니다.
 
----
+관련 코드 포인트:
 
-## 파일 입출력
+- `run_select_query()` in `src/storage.c`
+- `split_pipe_line()` in `src/storage.c`
+- `print_execution_result()` in `src/executor.c`
+
+## 3. 파일 입출력
 
 ### 파일 구성
 
@@ -124,27 +131,18 @@ SELECT 동작 단계:
   - 실제 row 데이터 저장
   - 한 줄 = 한 row
 
-### Ex. `demo.students` 테이블
+### 디렉터리 예시
 
 ```text
 db_root/
-  demo
-  |_ students.schema
-  |_ students.data
-```
-
-### Ex. schema 없이 바로 쓰는 경우
-
-```text
-db_root/
-  |_ students.schema
-  |_ students.data
+  demo/
+    students.schema
+    students.data
 ```
 
 ### `.schema`
 
-- 저장 형식: `|` 구분 텍스트
-- 의미: 컬럼 순서 정의
+컬럼명 목록을 `|` 구분 텍스트로 저장합니다.
 
 ```text
 id|name|major|grade
@@ -152,23 +150,22 @@ id|name|major|grade
 
 ### `.data`
 
-- 저장 형식: `|` 구분 텍스트
-- 의미: 실제 row 데이터
-- 규칙: 한 줄 = 한 row
+실제 row를 `|` 구분 텍스트로 저장합니다.
 
 ```text
 1|Alice|Database|A
 2|Bob|AI|B
+3|Choi|Data|A
 ```
 
-### 파일 입출력에 사용한 함수
+### 주요 함수
 
 #### `src/common.c`
 
 - `read_text_file()`
   - 텍스트 파일 전체 읽기
 - `write_text_file()`
-  - 파일 새로 쓰기 / 초기화
+  - 파일 새로 쓰기
 - `append_text_file()`
   - `.data` 끝에 row 추가
 - `ensure_parent_directory()`
@@ -177,41 +174,25 @@ id|name|major|grade
 #### `src/storage.c`
 
 - `build_table_paths()`
-  - `[schema.]table` -> `.schema` / `.data` 경로 변환
+  - `[schema.]table`을 `.schema` / `.data` 경로로 변환
 - `load_table_definition()`
-  - `.schema` 로드
-  - 컬럼 순서 복원
+  - `.schema`를 읽고 컬럼 순서를 복원
 - `serialize_row()`
-  - INSERT row 직렬화
+  - INSERT row를 텍스트 한 줄로 변환
 - `split_pipe_line()`
-  - `.data` 한 줄 복원
+  - `.data` 한 줄을 다시 컬럼 값 목록으로 복원
 - `append_insert_row()`
   - INSERT 결과를 `.data`에 기록
 - `run_select_query()`
   - `.schema` / `.data` 기반 SELECT 수행
 
-### 정리
+## 4. 시연 / 데모
 
-- 테이블 단위 저장: `.schema` + `.data`
-- INSERT: row 직렬화 후 `.data` append
-- SELECT: `.schema` / `.data` 읽기 후 결과 복원
-
----
-
-## 시연 내용
-
-### 사용 파일
-
-- DB 경로: `examples/db`
-- SQL 파일: `examples/sql/demo_workflow.sql`
-
-### 시연 순서
-
-1. `demo.students` 테이블에 `INSERT` 2회 실행
-2. `SELECT *` 결과 확인
-3. `WHERE id = 2` 결과 확인
+발표에서는 Docker보다 로컬 실행이 시연에 더 적합합니다. 그래야 insert 전 파일 상태와 insert 후 파일 상태를 같은 경로에서 바로 확인할 수 있습니다.
 
 ### 시연 SQL
+
+`examples/sql/demo_workflow.sql`
 
 ```sql
 INSERT INTO demo.students (id, name, major, grade) VALUES (2, 'Bob', 'AI', 'B');
@@ -220,16 +201,94 @@ SELECT * FROM demo.students;
 SELECT name, grade FROM demo.students WHERE id = 2;
 ```
 
+### 권장 시연 순서
+
+1. 데모 DB를 초기 상태로 복사합니다.
+2. insert 전 `students.data` 한 줄 상태를 보여줍니다.
+3. SQL 파일을 실행합니다.
+4. `SELECT *`와 `WHERE` 결과를 보여줍니다.
+5. insert 후 `students.data`가 3줄이 된 것을 보여줍니다.
+
+### VS Code 터미널 명령어
+
+```powershell
+cd D:\03Dev\05Jungle\SuYo\Week5\W5-Team3\wk06-mini-sql
+$env:ZIG_EXE='D:\03Dev\01DevTools\zig-x86_64-windows-0.15.2\zig.exe'
+powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1
+Remove-Item .\tests\tmp\demo_db -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force .\tests\tmp\demo_db | Out-Null
+Copy-Item .\examples\db\* .\tests\tmp\demo_db -Recurse -Force
+Get-Content .\tests\tmp\demo_db\demo\students.data
+.\build\mini_sql.exe .\tests\tmp\demo_db .\examples\sql\demo_workflow.sql
+Get-Content .\tests\tmp\demo_db\demo\students.data
+```
+
 ### 확인 포인트
 
-- INSERT 결과가 실제 `.data` 파일에 row로 저장되는지
-- SELECT가 `.schema` 기준으로 컬럼 순서를 해석하는지
-- WHERE 조건으로 필요한 row만 필터링되는지
-- `executor.c`가 최종 결과를 표 형태로 출력하는지
+- insert 전에는 `students.data`가 1줄인지
+- SQL 실행 후 `INSERT 1`이 2번 출력되는지
+- `SELECT *` 결과가 3 rows인지
+- `WHERE id = 2` 결과가 Bob 한 줄만 나오는지
+- 실행 후 `students.data`가 3줄인지
 
----
+## 5. 회고
 
-## 빌드/실행/테스트
+이번 구현에서 특히 흥미로웠던 점은, 많은 함수가 "실제 결과값 자체"를 반환하지 않고 "성공했는지 실패했는지"만 `bool`로 반환한다는 점이었습니다. 대신 실제 결과 데이터는 포인터나 주소를 통해 직접 채워 넣습니다.
+
+예를 들어 아래 코드는 `parse_sql_script()`가 `SQLScript`를 반환하는 것이 아니라, `&script`로 넘겨준 주소에 파싱 결과를 채우고, 함수 자체는 성공 여부만 돌려줍니다.
+
+```c
+if (!parse_sql_script(source, &script, error, sizeof(error))) {
+    fprintf(stderr, "parse error: %s\n", error);
+    free(source);
+    return 1;
+}
+```
+
+이 방식이 보이는 이유는 다음과 같습니다.
+
+1. C에서는 큰 구조체를 함수 반환값으로 직접 주고받기보다, 호출자가 미리 만든 공간에 값을 채워 넣는 방식이 흔합니다.
+2. 성공/실패와 실제 결과 데이터를 분리하면 에러 처리 흐름이 명확해집니다.
+3. 같은 패턴을 parser, executor, storage 전반에 통일해서 적용할 수 있습니다.
+
+이 프로젝트에서도 같은 흐름이 반복됩니다.
+
+- `parse_sql_script(source, &script, ...)`
+  - 파싱 결과를 `script`에 채움
+- `execute_statement(..., &result, ...)`
+  - 실행 결과를 `result`에 채움
+- `append_insert_row(..., &result->affected_rows, ...)`
+  - 영향받은 row 수를 주소로 전달받아 채움
+- `run_select_query(..., &result->query_result, ...)`
+  - SELECT 결과 테이블을 주소로 전달받아 채움
+
+관련 코드 예시:
+
+```c
+if (!execute_statement(&script.items[index], db_root, &result, error, sizeof(error))) {
+    fprintf(stderr, "execution error: %s\n", error);
+    free_execution_result(&result);
+    free_script(&script);
+    free(source);
+    return 1;
+}
+```
+
+```c
+if (statement->type == STATEMENT_INSERT) {
+    result->kind = EXECUTION_INSERT;
+    return append_insert_row(db_root, &statement->as.insert, &result->affected_rows, error, error_size);
+}
+
+if (statement->type == STATEMENT_SELECT) {
+    result->kind = EXECUTION_SELECT;
+    return run_select_query(db_root, &statement->as.select, &result->query_result, error, error_size);
+}
+```
+
+이 패턴을 보면서, C에서는 "무엇을 반환할지"보다 "어디에 결과를 써 넣을지"를 먼저 설계하는 경우가 많다는 점을 체감할 수 있었습니다. 단순히 문법 차이로 끝나는 것이 아니라, 함수 책임 분리와 에러 처리 구조까지 함께 연결된다는 점이 인상적이었습니다.
+
+## 빌드 / 실행 / 테스트
 
 ### 빌드
 
@@ -237,26 +296,16 @@ SELECT name, grade FROM demo.students WHERE id = 2;
 .\scripts\build.ps1
 ```
 
-출력:
-- `build\mini_sql.exe`
-- `build\test_runner.exe`
-
-### 실행(데모)
+### 데모 실행
 
 ```powershell
 .\scripts\demo.ps1
 ```
 
-직접 실행:
+또는 직접 실행:
 
 ```powershell
 .\build\mini_sql.exe examples\db examples\sql\demo_workflow.sql
-```
-
-또는
-
-```powershell
-.\build\mini_sql.exe --db examples\db --file examples\sql\demo_workflow.sql
 ```
 
 ### 테스트
@@ -265,12 +314,6 @@ SELECT name, grade FROM demo.students WHERE id = 2;
 .\scripts\test.ps1
 ```
 
-실행 대상:
-- `tests\test_runner.c` 정적 테스트
-- `scripts\test.ps1` 통합 테스트
-
----
-
 ## 프로젝트 트리
 
 ```text
@@ -278,7 +321,7 @@ SELECT name, grade FROM demo.students WHERE id = 2;
 + include/
   - common.h
   - executor.h
-  - parser.h    
+  - parser.h
   - storage.h
 + src/
   - common.c
@@ -296,5 +339,3 @@ SELECT name, grade FROM demo.students WHERE id = 2;
   - db/
   - sql/
 ```
-
----
