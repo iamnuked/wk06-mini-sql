@@ -219,14 +219,14 @@ escape 규칙:
 
 ---
 
-## 프로젝트 트리(현재)
+## 프로젝트 트리
 
 ```text
 .
 + include/
   - common.h
   - executor.h
-  - parser.h      (AST 타입 통합)
+  - parser.h    
   - storage.h
 + src/
   - common.c
@@ -246,11 +246,3 @@ escape 규칙:
 ```
 
 ---
-
-## 남은 개선 포인트
-
-- `DELETE`, `UPDATE`, `ORDER BY` 지원
-- 타입 시스템(`int`, `text` 구분) 강화
-- 다중 조건 WHERE, NULL, 연산자 확대
-- 에러 메시지 표준화
-- REPL 모드 추가
