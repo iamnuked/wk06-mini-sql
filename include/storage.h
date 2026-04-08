@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-#include "ast.h"
+#include "parser.h"
 
 typedef struct {
     QualifiedName name;

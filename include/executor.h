@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #include "storage.h"
+#include "parser.h"
 
 typedef enum {
     EXECUTION_INSERT,
