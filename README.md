@@ -24,31 +24,20 @@ SELECT id, name FROM demo.students WHERE id = 1;
 
 ## 실행 파이프라인
 ```mermaid
-flowchart LR
-    A["SQL 파일"] --> B["Parser+Tokenizer (src/parser.c)"]
-    B --> C["Executor (src/executor.c)"]
-    C --> D["Storage (src/storage.c)"]
-    D --> E["파일 시스템 (.schema / .data)"]
-    C --> F["CLI 출력"]
-```
-
-상세 흐름:
-
-```mermaid
 sequenceDiagram
     participant U as "사용자"
-    participant CLI as "mini_sql"
-    participant P as "Parser (Tokenizer+Parser)"
-    participant X as "Executor"
-    participant S as "Storage"
-    participant F as "Files"
+    participant M as "main.c"
+    participant P as "parser.c"
+    participant E as "executor.c"
+    participant S as "storage.c"
+    participant F as "파일 시스템"
 
-    U->>CLI: SQL 파일 실행 요청
-    CLI->>P: SQL 텍스트 전달
-    P->>P: 토큰화 + AST 유사 구조 생성
-    P-->>CLI: SQLScript(구문 트리)
-    CLI->>X: statement 실행
-    X->>S: INSERT / SELECT 처리
+    U->>M: SQL 파일 실행 요청
+    M->>P: SQL 텍스트 전달
+    P->>P: 토큰화 + AST 생성
+    P-->>M: SQLScript
+    M->>E: statement 실행 요청
+    E->>S: INSERT / SELECT 처리
     alt INSERT
         S->>F: .data append
         F-->>S: 성공/실패
@@ -56,8 +45,9 @@ sequenceDiagram
         S->>F: .data, .schema read
         F-->>S: 행 목록
     end
-    X-->>CLI: ExecutionResult
-    CLI-->>U: 출력
+    S-->>E: 처리 결과
+    E-->>M: ExecutionResult
+    M-->>U: 출력
 ```
 
 ---
@@ -66,7 +56,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart TB
-  subgraph CLI
+  subgraph Entry
     MAIN["src/main.c"]
   end
 
