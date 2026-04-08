@@ -276,6 +276,58 @@ schema가 `id|name|major|grade` 라면 저장 row는 아래처럼 됩니다.
 - 임시 DB 생성
 - 샘플 SQL 기능 테스트 실행
 
+## 8.4 Docker로 실행/개발하기
+
+도커 환경에서도 바로 빌드하고 실행할 수 있도록 `Dockerfile`, `Makefile`, `.dockerignore`를 추가했습니다.
+
+### 이미지 빌드
+
+```bash
+docker build -t mini-sql .
+```
+
+빌드 과정에서 컨테이너 안에서 `make test`가 먼저 실행되므로, 이미지가 만들어졌다면 테스트까지 통과한 상태입니다.
+
+### 컨테이너로 바로 실행
+
+```bash
+docker run --rm mini-sql
+```
+
+기본적으로 아래 명령과 같은 동작을 합니다.
+
+```bash
+./build/mini_sql examples/db examples/sql/demo_workflow.sql
+```
+
+다른 DB/SQL 파일을 쓰고 싶다면 CMD 인자만 바꿔서 실행하면 됩니다.
+
+```bash
+docker run --rm mini-sql examples/db examples/sql/demo_workflow.sql
+```
+
+### 개발용으로 컨테이너 안에서 작업
+
+소스를 마운트해서 컨테이너 안에서 직접 빌드/테스트하고 싶다면:
+
+```bash
+docker run --rm -it -v "$(pwd):/workspace" -w /workspace gcc:14-bookworm bash
+```
+
+컨테이너 안에서 아래처럼 작업하면 됩니다.
+
+```bash
+make
+make test
+./build/mini_sql examples/db examples/sql/demo_workflow.sql
+```
+
+Windows PowerShell에서는 마운트 경로를 아래처럼 주면 됩니다.
+
+```powershell
+docker run --rm -it -v "${PWD}:/workspace" -w /workspace gcc:14-bookworm bash
+```
+
 ## 9. 테스트 전략
 
 과제 품질 조건에 맞춰 단위 테스트와 기능 테스트를 분리했습니다.
