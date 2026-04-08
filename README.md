@@ -28,27 +28,23 @@ SELECT id, name FROM demo.students WHERE id = 1;
 
 ```mermaid
 flowchart LR
-    A[SQL 파일] --> B[Parser+Tokenizer
-      (src/parser.c)]
-    B --> C[Executor
-      (src/executor.c)]
-    C --> D[Storage
-      (src/storage.c)]
-    D --> E[파일 시스템
-      .schema / .data]
-    C --> F[CLI 출력]
+    A["SQL 파일"] --> B["Parser+Tokenizer (src/parser.c)"]
+    B --> C["Executor (src/executor.c)"]
+    C --> D["Storage (src/storage.c)"]
+    D --> E["파일 시스템 (.schema / .data)"]
+    C --> F["CLI 출력"]
 ```
 
 상세 흐름:
 
 ```mermaid
 sequenceDiagram
-    participant U as 사용자
-    participant CLI as mini_sql
-    participant P as Parser(Tokenizer+Parser)
-    participant X as Executor
-    participant S as Storage
-    participant F as Files
+    participant U as "사용자"
+    participant CLI as "mini_sql"
+    participant P as "Parser (Tokenizer+Parser)"
+    participant X as "Executor"
+    participant S as "Storage"
+    participant F as "Files"
 
     U->>CLI: SQL 파일 실행 요청
     CLI->>P: SQL 텍스트 전달
@@ -74,20 +70,20 @@ sequenceDiagram
 ```mermaid
 flowchart TB
   subgraph CLI
-    MAIN[src/main.c]
+    MAIN["src/main.c"]
   end
 
   subgraph Parse
-    PARSER[src/parser.c]
+    PARSER["src/parser.c"]
   end
 
   subgraph Execute
-    EXEC[src/executor.c]
-    STORAGE[src/storage.c]
+    EXEC["src/executor.c"]
+    STORAGE["src/storage.c"]
   end
 
   subgraph Shared
-    COMMON[src/common.c]
+    COMMON["src/common.c"]
   end
 
   MAIN --> PARSER
